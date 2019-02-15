@@ -1,100 +1,82 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
+using System.Linq;
+using System.Threading;
 
-namespace Facepunch.UnityBatch
-{
+namespace Facepunch.UnityBatch {
 
-    class Program
-    {
-        static int Main( string[] args )
-        {
-            var unityVersion = "1.2.3";
-            var projectPath = "project/path";
+    internal class Program {
+        private static int Main(string[] args) {
+            string unityExePath = args.First();
+            string unityExeArguments = String.Join(" ", args.Skip(1).ToArray());
+            string projectPath = args.SkipWhile(arg => arg.ToLowerInvariant() != "-projectpath").ElementAt(1);
 
-            for (int i = 0; i<args.Length; i++ )
-            {
-                if ( args[i] == "-unityVersion" ) unityVersion = args[i + 1];
-                if ( args[i] == "-projectPath" ) projectPath = args[i + 1];
-
-            }
-
-            return RunUnity( unityVersion, projectPath, string.Join( " ", args ) );
+            return RunUnity(unityExePath, unityExeArguments, projectPath);
         }
 
-        private static int RunUnity( string unityVersion, string projectPath, string fullOptions )
-        {
-            var unityPath = $"C:/Program Files/Unity/Hub/Editor/{unityVersion}/Editor/Unity.exe";
-            var logPath = System.IO.Path.GetTempFileName();
-            var commandLine = $"-silent-crashes -no-dialogs -batchmode -quit {fullOptions} -logFile \"{logPath}\"";
+        private static int RunUnity(string unityExePath, string unityExeArguments, string projectPath) {
+            string logPath = Path.GetTempFileName();
+            unityExeArguments += $" -logFile \"{logPath}\"";
 
-            if ( !System.IO.File.Exists( unityPath ) )
-            {
-                Console.WriteLine( $"Couldn't find unity version: {unityPath}" );
+            if (!File.Exists(unityExePath)) {
+                Console.WriteLine($"File doesn't exist: {unityExePath}");
                 return 1;
             }
 
-            var process = new Process();
-            process.StartInfo.FileName = unityPath;
-            process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-            process.StartInfo.WorkingDirectory = projectPath;
-            process.StartInfo.ErrorDialog = false;
-            process.StartInfo.Arguments = commandLine;
+            Process process = new Process {
+                StartInfo = {
+                    FileName = unityExePath,
+                    //WindowStyle = ProcessWindowStyle.Hidden,
+                    WorkingDirectory = projectPath,
+                    ErrorDialog = false,
+                    Arguments = unityExeArguments
+                }
+            };
 
-            Console.WriteLine( process.StartInfo.FileName );
-            Console.WriteLine( process.StartInfo.Arguments );
+            Console.WriteLine("Unity Executable: " + process.StartInfo.FileName);
+            Console.WriteLine("Unity Argument: " + process.StartInfo.Arguments);
+            Console.WriteLine("Log File : " + logPath);
+
             Console.WriteLine();
-
-            Console.WriteLine( "Running...." );
 
             process.Start();
 
-            using ( FileStream stream = File.Open( logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite ) )
-            {
-                using ( StreamReader reader = new StreamReader( stream ) )
-                {
-                    while ( !process.HasExited )
-                    {
-                        PrintFromLog( reader );
-                        System.Threading.Thread.Sleep( 500 );
+            using (FileStream stream = File.Open(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+                using (StreamReader reader = new StreamReader(stream)) {
+                    while (!process.HasExited) {
+                        PrintFromLog(reader);
+                        Thread.Sleep(250);
                     }
 
-                    System.Threading.Thread.Sleep( 500 );
-                    PrintFromLog( reader );
+                    Thread.Sleep(250);
+                    PrintFromLog(reader);
                 }
             }
 
             //
             // Try to delete the log file
             //
-            for (int i=0; i< 5; i++ )
-            {
-                try
-                {
-                    System.IO.File.Delete( logPath );
+            Thread.Sleep(1000);
+            for (int i = 0; i < 5; i++) {
+                try {
+                    File.Delete(logPath);
                     break;
-                }
-                catch ( System.IO.IOException )
-                {
-                    Console.WriteLine( $"Couldn't delete {logPath}.. trying again.." );
-                    System.Threading.Thread.Sleep( 1000 );
-                    continue;
+                } catch (IOException) {
+                    Console.WriteLine($"Couldn't delete {logPath}.. trying again..");
+                    Thread.Sleep(1000);
                 }
             }
 
             return process.ExitCode;
         }
 
-        private static void PrintFromLog( StreamReader logStream )
-        {
-            var txt = logStream.ReadToEnd();
-            if ( string.IsNullOrEmpty( txt ) ) return;
+        private static void PrintFromLog(StreamReader logStream) {
+            string txt = logStream.ReadToEnd();
+            if (string.IsNullOrEmpty(txt))
+                return;
 
-            Console.Write( txt );
+            Console.Write(txt);
         }
     }
 }
